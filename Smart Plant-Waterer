@@ -1,0 +1,329 @@
+/*
+  Student Name: Marcus Kim
+  Course Code: TEJ2O
+  Teacher: Mr. So
+  Project Name: Smart Plant Waterer
+  Project Description: Automatically watering a plant periodically based on the temperature and brightness surrounding the plant and covering and giving indicators based on temperatures
+  Date of Completion: June 3, 2025
+*/
+
+///// plant conditions
+bool isWatered = false; //create bool flag for making plant water only once (watering time)
+bool isCovered = false; //create bool flag for making motor cover plant until told otherwise (too hot)
+bool isGrown = false; //create bool flag for green led when plant is fully grown
+bool isClose; // create bool flag for determining if an object is still close to ultrasonic sensor
+int i; // create variable for for loop
+
+
+
+/////push button portion
+int pushButton = 2; //assign pin # for push button
+int buttonState; //create variable to hold button state
+int halfSec = 500; //create variable for half a second worth of time waited ms
+
+/////this is stepper motor portion
+
+#include <Stepper.h> //Includes the Arduino Stepper Library
+const int stepsPerRevolution = 2038; // Defines the number of steps per rotation
+
+Stepper myStepper = Stepper(stepsPerRevolution, 13, 11, 12, 10); // Creates an instance of stepper class
+// Pins entered in sequence IN1-IN3-IN2-IN4 for proper step sequence
+
+/////this is ultrasonic sensor portion
+
+const int trigPin = 9; //set pin # for trig pin
+const int echoPin = 8; //set pin # for trig pin
+long duration; // create variable to hold duration time
+float distance; // create variable to hold distance cm
+
+/////this is rgb led portion
+
+int redPin = 4; //set pin # for red led
+int greenPin = 5; //set pin # for green led
+int bluePin = 6; //set pin # for blue led
+
+/////this is temperature sensor portion
+
+
+//TMP36 Pin Variables
+int sensorPin = A5; //the analog pin the TMP36's Vout (sense) pin is connected to
+//the resolution is 10 mV / degree centigrade with a 500 mV offset to allow for negative temperatures
+
+/////this is photocell portion
+
+
+int photocellPin = A4;     // the cell and 10K pulldown are connected to analog pin
+int photocellReading;     // create variable to hold the analog reading from the sensor divider
+
+/////void setup portion
+
+void setup() {
+  pinMode (pushButton, INPUT); // sets pushButton as an INPUT
+
+  pinMode(trigPin, OUTPUT); //set trig pin as output
+  pinMode(echoPin, INPUT); //set echo pin as output
+  Serial.begin(9600); //connect to 9600 baud rate
+
+  pinMode(redPin, OUTPUT); //set led as output
+  pinMode(greenPin, OUTPUT); //set led as output
+  pinMode(bluePin, OUTPUT); //set led as output
+}
+
+/////void loop portion
+
+void loop() {
+  buttonState = digitalRead(pushButton); // reads the state of the pushbutton
+  delay(200); // delay for stability
+
+  if (buttonState == HIGH) { //checks if button was pressed
+    Serial.println("System paused for 10 seconds."); //print and move to next line
+
+    digitalWrite(redPin, HIGH); //turn on red led
+    digitalWrite(greenPin, HIGH); //turn on green led
+    digitalWrite(bluePin, HIGH); //turn on blue led
+    delay(halfSec); // pause the system for half a second
+    digitalWrite(redPin, LOW); //turn off red led
+    digitalWrite(greenPin, LOW); //turn off green led
+    digitalWrite(bluePin, LOW); //turn off blue led
+    delay(halfSec); // pause the system for half a second
+    Serial.println("9"); //print and move to next line
+
+    digitalWrite(redPin, HIGH); //turn on red led
+    digitalWrite(greenPin, HIGH); //turn on green led
+    digitalWrite(bluePin, HIGH); //turn on blue led
+    delay(halfSec); // pause the system for half a second
+    digitalWrite(redPin, LOW); //turn off red led
+    digitalWrite(greenPin, LOW); //turn off green led
+    digitalWrite(bluePin, LOW); //turn off blue led
+    delay(halfSec); // pause the system for half a second
+    Serial.println("8"); //print and move to next line
+
+    digitalWrite(redPin, HIGH); //turn on red led
+    digitalWrite(greenPin, HIGH); //turn on green led
+    digitalWrite(bluePin, HIGH); //turn on blue led
+    delay(halfSec); // pause the system for half a second
+    digitalWrite(redPin, LOW); //turn off red led
+    digitalWrite(greenPin, LOW); //turn off green led
+    digitalWrite(bluePin, LOW); //turn off blue led
+    delay(halfSec); // pause the system for half a second
+    Serial.println("7"); //print and move to next line
+
+    digitalWrite(redPin, HIGH); //turn on red led
+    digitalWrite(greenPin, HIGH); //turn on green led
+    digitalWrite(bluePin, HIGH); //turn on blue led
+    delay(halfSec); // pause the system for half a second
+    digitalWrite(redPin, LOW); //turn off red led
+    digitalWrite(greenPin, LOW); //turn off green led
+    digitalWrite(bluePin, LOW); //turn off blue led
+    delay(halfSec); // pause the system for half a second
+    Serial.println("6"); //print and move to next line
+
+    digitalWrite(redPin, HIGH); //turn on red led
+    digitalWrite(greenPin, HIGH); //turn on green led
+    digitalWrite(bluePin, HIGH); //turn on blue led
+    delay(halfSec); // pause the system for half a second
+    digitalWrite(redPin, LOW); //turn off red led
+    digitalWrite(greenPin, LOW); //turn off green led
+    digitalWrite(bluePin, LOW); //turn off blue led
+    delay(halfSec); // pause the system for half a second
+    Serial.println("5"); //print and move to next line
+
+    digitalWrite(redPin, HIGH); //turn on red led
+    digitalWrite(greenPin, HIGH); //turn on green led
+    digitalWrite(bluePin, HIGH); //turn on blue led
+    delay(halfSec); // pause the system for half a second
+    digitalWrite(redPin, LOW); //turn off red led
+    digitalWrite(greenPin, LOW); //turn off green led
+    digitalWrite(bluePin, LOW); //turn off blue led
+    delay(halfSec); // pause the system for half a second
+    Serial.println("4"); //print and move to next line
+
+    digitalWrite(redPin, HIGH); //turn on red led
+    digitalWrite(greenPin, HIGH); //turn on green led
+    digitalWrite(bluePin, HIGH); //turn on blue led
+    delay(halfSec); // pause the system for half a second
+    digitalWrite(redPin, LOW); //turn off red led
+    digitalWrite(greenPin, LOW); //turn off green led
+    digitalWrite(bluePin, LOW); //turn off blue led
+    delay(halfSec); // pause the system for half a second
+    Serial.println("3"); //print and move to next line
+
+    digitalWrite(redPin, HIGH); //turn on red led
+    digitalWrite(greenPin, HIGH); //turn on green led
+    digitalWrite(bluePin, HIGH); //turn on blue led
+    delay(halfSec); // pause the system for half a second
+    digitalWrite(redPin, LOW); //turn off red led
+    digitalWrite(greenPin, LOW); //turn off green led
+    digitalWrite(bluePin, LOW); //turn off blue led
+    delay(halfSec); // pause the system for half a second
+    Serial.println("2"); //print and move to next line
+
+    digitalWrite(redPin, HIGH); //turn on red led
+    digitalWrite(greenPin, HIGH); //turn on green led
+    digitalWrite(bluePin, HIGH); //turn on blue led
+    delay(halfSec); // pause the system for half a second
+    digitalWrite(redPin, LOW); //turn off red led
+    digitalWrite(greenPin, LOW); //turn off green led
+    digitalWrite(bluePin, LOW); //turn off blue led
+    delay(halfSec); // pause the system for half a second
+    Serial.println("1"); //print and move to next line
+
+    digitalWrite(redPin, HIGH); //turn on red led
+    delay(halfSec); // pause the system for half a second
+    digitalWrite(redPin, LOW); //turn off red led
+    Serial.println("System unpaused."); //print and move to next line
+
+    delay(halfSec); // pause the system for half a second
+
+    isGrown = false; //resets plant grown variable
+
+    return; // exit the current loop to skip rest of the code
+
+  }
+
+  /////this is ultrasonic sensor portion
+  digitalWrite(trigPin, LOW); // ensure the trigger pin is initially low to start clean
+  delayMicroseconds(2); // wait 2 microseconds for sensor to settle
+  digitalWrite(trigPin, HIGH); // send a 10-microsecond high pulse to trigger the ultrasonic burst
+  delayMicroseconds(10); // keep the trig pin high for 10 microseconds
+  digitalWrite(trigPin, LOW); //set trig pin low again to end the pulse
+
+  duration = pulseIn(echoPin, HIGH); // measure the time in microseconds for the echo to return
+  distance = duration * 0.034 / 2; // convert time to distance, cm; divide by 2 since it’s a round trip
+  Serial.print("Distance: "); // print “Distance” to serial monitor
+  Serial.print(distance); // print calculated distance
+  Serial.println("cm"); //print unit and move to next line
+
+
+  /////this is temperature sensor portion
+  int reading = analogRead(sensorPin); // Get the raw analog voltage reading from the temperature sensor
+
+  // Converting the raw reading to actual voltage (assuming a 5V reference)
+  float voltage = reading * 5.0; // Multiply by 5V because the analog range is 0–5V
+  voltage /= 1024.0;             // Divide by 1024 (10-bit ADC resolution) to get the actual voltage
+
+  float temperatureC = (voltage - 0.5) * 100; //calculate the temperature in Celsius
+  // Convert voltage to temperature using the sensor’s formula:
+  // Subtract 0.5V (500 mV offset), then multiply by 100 (10 mV per degree)
+
+  Serial.print(temperatureC);       // Print the temperature value to the Serial Monitor
+  Serial.println(" degrees C");     // Add units and move to a new line
+
+  /////this is photocell portion
+  photocellReading = analogRead(photocellPin);  // read photocell pin
+  Serial.print("Photocell reading = "); //print “Photocell reading =”
+  Serial.println(photocellReading);     // print the raw analog reading and move to the next line
+
+
+
+
+
+
+
+
+  /////when plant is fully grown (green)
+
+  if (distance < 10) { //checks if the distance of the object is less than 20 cm away (means the plant is                 
+                       //fully grown)
+    bool isClose = true; //make variable true
+
+
+    for (int i = 0; i < 5; i++) { //for loop to check it five times
+      delay(1000); // wait 1 second
+      distance = duration * 0.034 / 2; // convert time to distance, cm; divide by 2 since it’s a round trip
+      if (distance >= 10) { // check if its still close
+        isClose = false; // object moved away
+        isCovered = true; // make it so the plant can uncover if this plant function happens during the   
+                           //covering process
+        break; //stop code and follow continuing code later
+      }
+    }
+
+    if (isClose) { // if it’s true, then object is there for five seconds
+      isGrown = true; //change grown variable to true so that other plant functions do not run while this  
+                      //variable is true
+      digitalWrite(greenPin, HIGH); //turn on green led
+      delay(1000); //stay on 1000ms
+
+    }
+  }
+
+
+
+
+
+
+  /////when it’s too cold (blue)
+
+  if (temperatureC < 29 && isGrown == false) { //checks if the temperature is too cold and if the plant is  
+                                               //grown
+
+    digitalWrite(bluePin, HIGH); //turn on blue led
+    delay(1000); //stay on 1000ms
+    digitalWrite(bluePin, LOW); //turn off blue led
+    delay(1000); //stay off 1000ms
+
+  }
+
+
+  /////when it’s too hot (red), cover the plant
+
+  if (temperatureC > 30 && isCovered == false && isGrown == false) { //checks if the temperature is too hot 
+                                                                     //and covers the plant and if the plant  
+                                                                     //is grown
+
+    //led part
+
+    digitalWrite(redPin, HIGH); //turn on red led
+    delay(1000); //stay on 1000ms
+
+
+    /////this is stepper motor portion
+    // rotate CW
+    myStepper.setSpeed(10); // set the motor speed to 10 RPM (slower than 20 RPM)
+    myStepper.step(stepsPerRevolution / 4); // rotate the motor clockwise for a 90 degree revolution
+    isCovered = true; //set flag to true
+  }
+
+  else if (temperatureC <= 30 && isCovered == true) { //when it cools down, uncover the plant
+
+    // rotate CCW quickly at 10 RPM
+    myStepper.setSpeed(10); // increase speed to 10 RPM
+    myStepper.step(-stepsPerRevolution / 4); // rotate the motor counterclockwise for a 90 degree revolution
+    isCovered = false; //reset flag
+    digitalWrite(redPin, LOW); //turn off red led
+    delay(1000); //stay off 1000ms
+
+  }
+
+
+
+
+  /////when it’s good time to water plant
+
+  if (temperatureC > 20 && temperatureC < 30 && photocellReading > 200 && isWatered == false && isGrown == false) { //check if it’s good temperature and good brightness and if plant is grown
+
+    /////this is stepper motor portion
+    // rotate CW slowly at 5 RPM
+    myStepper.setSpeed(5); // set the motor speed to 10 RPM (slower than 20 RPM)
+    myStepper.step(-stepsPerRevolution / 8); // rotate the motor clockwise for a 45 degree revolution
+    delay(100); // wait 100 ms before next movement
+
+    delay(5000); // watering wait time
+
+
+    // rotate CCW quickly at 10 RPM
+    myStepper.setSpeed(5); // slowly rotate back
+    myStepper.step(stepsPerRevolution / 8); // reset to original position
+    delay(100); // pause briefly 100 ms
+
+    isWatered = true; // set flag to true so it only happens once
+  }
+
+  if (temperatureC <= 20 || temperatureC >= 30 || photocellReading <= 200 || isGrown == false) { // when 
+                                                                                                 //plant is                           
+                                                                                            //done watering,                                          
+                                                                                     //stop watering process
+    isWatered = false;  // reset flag if conditions not good
+  }
+}
