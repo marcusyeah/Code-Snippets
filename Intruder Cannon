@@ -1,0 +1,596 @@
+/*
+    Student Name: Ian Choy, Marcus Kim
+    Teacher Name: Mr. So
+    Name of Sketch: Intruder Cannon
+    Description of Sketch: A project that allows the owner to automatically or manually deter intruders using a cannon, controlled by motors and a joystick
+    Date of Completion: January 20, 2026
+*/
+
+#include <Servo.h> //include servo library to control servo motors
+#include <Stepper.h> // include stepper library to control stepper motors
+#include <LiquidCrystal.h> // include LCD library to control LCD screen
+#include <ezButton.h> // include ezButton library to handle joystick button inputs
+
+int targetDistance; //set a variable for the distance between the Ultrasonic Sensor and the top of                                                            
+    //the target
+int targetWidth; //set a variable for the the distance between the cannon and the target
+float targetHeight; //set a variable for the height of the target, calculated from targetDistance 
+                    //and targetWidth
+float gravityValue = 980.665; //set a variable for the value of gravity in centimeters per second
+float horizontalInterval = 0.33; //set a variable for the time before the ball would hit the 
+                                 //ground at 0 degrees
+float horizontalDistance = 53.5; //set a variable for the distance before the ball would hit the 
+                                 //ground at 0 degrees
+float initialVelocity; //set a variable for the initial velocity of the ball, calculated from 
+                       //horizontalDistance / horizontalInterval
+float calculationOne; //set a variable for the first step of trajectory equation
+float calculationTwo; //set a variable for the second step of trajectory equation
+float calculationThree; //set a variable for the third step of trajectory equation
+float calculationFour; //set a variable for the fourth step of trajectory equation, first answer
+float calculationFive; //set a variable for the fourth step of trajectory equation, second answer
+float angleOne; //set a variable for the final step of trajectory equation, first answer
+float angleTwo; //set a variable for the final step of trajectory equation, second answer
+int trigPin = A3; //set a variable for the trig pin of the ultrasonic sensor
+int echoPin = A4; //set a variable for the echo pin of the ultrasonic sensor
+int pulseDuration; //set a variable for the time between pulses for the ultrasonic sensor
+int settleTime = 2; //set a variable for the ultrasonic sensor to settle
+int scanTime = 10; //set a variable for how long the ultrasonic is HIGH
+Servo angServo; //set a variable for the angled servo motor for commands to attach to
+int anglePin = 2; //set a variable for the pin of the angled servo motor
+int motorAngle = 0; //set a variable for the angle to move the angled servo motor
+int originAngle = 90; //set a variable for the angle to reset the angled servo motor
+const int stepsPerRevolution = 2048; //set a variable for the maximum amount of steps for the 
+   //stepper motor
+Stepper stepperMotor = Stepper(stepsPerRevolution, 7, 5, 6, 4); //set a variable for the pins of 
+   //the stepper motor
+float stepperAngle = 0; //set a variable for the angle to move the stepper motor
+float calculatedAngle; //set a variable for the amount the stepper has to go to in order to move 
+//to the calculated angle
+float returnAngle; //set a variable for the amount the stepper has to go to in order to reset from 
+  //the calculated angle
+float angledStep = 5.68; //set a variable for the amount to multiply the angle in order for it to 
+  //be one degree
+int speedAmount = 5; //set a variable for the speed of the stepper motor
+LiquidCrystal lcdScreen(13, 12, 11, 10, 9, 8); //set a variable for the pins of the LCD screen
+int longWait = 500; //set a variable for the amount of time stopped for the LCD screen for the 
+   //person to read
+int shortWait = 250; //set a variable for the amount of time stopped for an animation for the LCD 
+    //screen
+int monitorStatus; //set a variable to see if there is anything imputed in the serial monitor
+String incomingText; //set a variable for the input from the serial monitor
+int screenLock = 1; //set a variable to reset the manual mode after the cannon is fired
+Servo contServo; //set a variable for the continuous servo motor for commands to attach to
+int contPin = 3; //set a variable for the continuous servo motor pin
+int upTime = 300; //set a variable for the time the continuous servo motor goes up
+int downTime = 113; //set a variable for the time the continuous servo motor goes down
+int stopValue = 90; //set a variable to stop the continuous servo motor
+int cwValue = 83; //set a variable for the amount the continuous servo motor has to move up
+int ccwValue = 95; //set a variable for the amount the continuous servo motor has to move down
+int xPin = A1; //set a variable for the VRX pin of the joystick
+int yPin = A0; //set a variable for the VRY pin of the joystick
+int pushPin = A2; //set a variable for the SW pin of the joystick
+ezButton button (pushPin); //set a variable for commands to attach to the push pin
+int xValue = 0; //set a variable for the value of the x coordinates of the joystick
+int yValue = 0; //set a variable for the value of the y coordinates of the joystick
+int pushValue = 0; //set a variable to determine if the joystick has been pushed
+int debounceValue = 50; //set a time before the joystick button can be pressed so there are no 
+ //false positives
+void setup() {
+  pinMode(trigPin, OUTPUT); //set the trigPin as an OUTPUT
+  pinMode(echoPin, INPUT); //set the echoPin as an INPUT
+  Serial.begin(9600); //connect to the serial monitor
+  angServo.attach (anglePin); //set pin number for the servo library
+  angServo.write (originAngle); //move the angled servo motor to its original position
+  stepperMotor.setSpeed(speedAmount); //set the speed of the stepper motor
+  lcdScreen.begin(16, 2); // initialize the LCD as a 16x2 size
+  lcdScreen.setCursor(0, 0); //tell the LCD where to start the display
+  contServo.attach (contPin); //set pin number for the servo library
+  contServo.write (stopValue); //stop the continuous servo motor in case it starts moving
+  button.setDebounceTime(debounceValue); //set debounce time to debounceValue ms
+  delay (shortWait); //wait shortWait ms
+}
+
+  void loop() {
+    lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+    lcdScreen.print ("Select mode"); //print to tell the user to select the mode
+    lcdScreen.setCursor (0,1); //tell the LCD where to start the display
+    lcdScreen.print ("Auto or Manual"); //print to tell the user the options that can be selected
+    monitorStatus = Serial.available(); //assign monitorStatus to see if something is imputed
+    if (monitorStatus > 0){ //check if something is imputed in the serial monitor
+    incomingText = Serial.readString(); //assign incomingText to what is input into the serial 
+ //monitor
+    while (incomingText == "Manual"){ //check if “Manual” is imputed in the serial monitor
+      contServo.write (stopValue); //stop the continuous servo motor in case it starts moving
+      if (screenLock == 1){ //check if the screen has been cleared once
+      lcdScreen.setCursor (0,1); //tell the LCD where to start the display
+      lcdScreen.print ("                                         "); //clear the screen
+      lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+      lcdScreen.print ("                             "); //clear the screen
+      screenLock = 0; //make this loop unable to be rerun before the button is pressed
+      }
+      button.loop(); //make sure enough time passed before another input is assigned
+      xValue = analogRead(xPin); //assign the value read on the x axis from the joystick
+      yValue = analogRead(yPin); //assign the value read on the y axis from the joystick
+      contServo.write(stopValue); //stop the continuous servo in case it starts moving
+      pushValue = button.getState(); //assign the value of the button state of the joystick
+      if (button.isPressed()){ //check if the button has been pressed
+        contServo.write(cwValue); //move the continuous servo motor clockwise
+        delay (upTime); //wait upTime ms
+        contServo.write(stopValue); //stop the continuous servo motor
+        delay (upTime); //wait upTime ms
+        contServo.write(ccwValue); //move the continuous servo motor counterclockwise
+        delay (downTime); //wait downTime ms
+        contServo.write(stopValue); //stop the continuous servo motor
+      }
+      if (yValue <= 10){ //check if the joystick is moved all the way to the left
+        motorAngle = motorAngle + 1; //add 1 to motorAngle to move 1 degree
+        angServo.write (motorAngle); //assign the value for the angled servo motor to move to
+        contServo.write (stopValue); //stop the continuous servo motor
+        lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+        lcdScreen.print("Y axis = "); //print the angle on the y rotation of the cannon
+        lcdScreen.print(motorAngle); //print the angle of the angled servo motor
+        lcdScreen.setCursor (0,1); //tell the LCD where to start the display
+        lcdScreen.print("X axis = "); //print the angle on the x rotation of the cannon
+        lcdScreen.print(stepperAngle/angledStep); //print the angle of the stepper motor
+      }
+      if (yValue >= 1000){ //check if the joystick is moved all the way to the left
+        motorAngle = motorAngle - 1; //minus 1 to motorAngle to move 1 degree
+        angServo.write (motorAngle); //assign the value for the angled servo motor to move to
+        contServo.write (stopValue); //stop the continuous servo motor
+        lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+        lcdScreen.print("Y axis = "); //print the angle on the y rotation of the cannon
+        lcdScreen.print(motorAngle); //print the angle of the angled servo motor
+        lcdScreen.setCursor (0,1); //tell the LCD where to start the display
+        lcdScreen.print("X axis = "); //print the angle on the x rotation of the cannon
+        lcdScreen.print(stepperAngle/angledStep); //print the angle of the stepper motor
+      }
+      if (xValue >= 1000){ //check if the joystick is moved all the way up
+        if (stepperAngle <= 0){ //check if the angle of the stepper motor is at or below 0
+          contServo.write (stopValue); //stop continuous servo motor in case it starts moving
+          lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+          lcdScreen.print ("Cannot go below 0 degrees"); //print to tell the user to move up 
+  //before moving down
+        }
+        else { //check if the angle of the stepper motor is larger than 0
+          stepperAngle = stepperAngle + angledStep; //add angledStep to stepperAngle to move 1 
+  //degree
+          stepperMotor.step (stepperAngle); //assign the value for the stepper motor to move to
+          contServo.write (stopValue); //stop the continuous servo in case it starts moving
+          lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+          lcdScreen.print("Y axis = "); //print the angle on the y rotation of the cannon
+          lcdScreen.print(motorAngle); //print the angle of the angled servo motor
+          lcdScreen.setCursor (0,1); //tell the LCD where to start the display
+          lcdScreen.print("X axis = "); //print the angle on the x rotation of the cannon
+          lcdScreen.print(-stepperAngle/angledStep); //print the angle of the stepper motor
+        }
+      }
+        if (xValue <= 10){ //check if the joystick is moved all the way down
+          stepperAngle = stepperAngle - angledStep; //minus angledStep to stepperAngle to move 1 
+  //degree
+          stepperMotor.step (stepperAngle); //assign the value for the stepper motor to move to
+          contServo.write (stopValue); //stop the continuous servo in case it starts moving
+          lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+          lcdScreen.print("Y axis = "); //print the angle on the y rotation of the cannon
+          lcdScreen.print(motorAngle); //print the angle of the angled servo motor
+          lcdScreen.setCursor (0,1); //tell the LCD where to start the display
+          lcdScreen.print("X axis = "); //print the angle on the x rotation of the cannon
+          lcdScreen.print(-stepperAngle/angledStep); //print the angle of the stepper motor
+        }
+      if (button.isReleased()){ //check if the button is released
+        stepperMotor.step (-stepperAngle); //move the stepper motor back to its original position
+        angServo.write (originAngle); //move the angled servo motor back to its original position
+        contServo.write (stopValue); //stop the continuous servo motor in case it starts moving
+        stepperAngle = 0; //reset the stepperAngle value
+        motorAngle = 0; //reset the motorAngle value
+        screenLock = 1; //allow the screen to be cleared
+      }
+    }
+    while (incomingText == "Auto"){ //check if “Auto” is imputed into the serial monitor
+      lcdScreen.setCursor(0,1); //tell the LCD where to start the display
+      lcdScreen.print("                                           "); //clear the LCD screen
+      lcdScreen.setCursor(0,0); //tell the LCD where to start the display
+      lcdScreen.print("                                           "); //clear the LCD screen
+    for (motorAngle = 0; motorAngle < 181; motorAngle = motorAngle + 1) { //create loop to spin 
+  //the angled servo motor 
+ //to check if there is a 
+//target
+      angServo.write(motorAngle); //assign the value for the angled servo motor to move to
+      digitalWrite(trigPin, LOW); //ensure the trigger pin is initially LOW to start clean
+      delay (settleTime); //wait settleTime ms for ultrasonic sensor to settle
+      digitalWrite(trigPin, HIGH); //send a HIGH pulse to trigger the ultrasonic burst
+      delay (scanTime); //keep the trig pin HIGH for scanTime ms
+      digitalWrite(trigPin, LOW); //set trig pin LOW again to end the pulse
+      pulseDuration = pulseIn(echoPin, HIGH); //measure the time in microseconds for the echo to 
+ //return
+      targetWidth = pulseDuration * 0.034 / 2; //convert time to distance, cm; divide by 2 since 
+ //it’s a round trip
+      if (targetWidth < 200) { //check if the distance is below 200
+        motorAngle = 181; //make the motorAngle be able to reset after the loop
+        for (stepperAngle = 0; stepperAngle < 1028.08; stepperAngle = stepperAngle + angledStep) { 
+  //create loop to spin the servo motor to check height of target
+          stepperMotor.step(-stepperAngle); //assign the value for the stepper motor to move to
+          digitalWrite(trigPin, LOW); //ensure the trigger pin is initially LOW to start clean
+          delay (settleTime); //wait settleTime ms for ultrasonic sensor to settle
+          digitalWrite(trigPin, HIGH); //send a HIGH pulse to trigger the ultrasonic burst
+          delay (scanTime); //keep the trig pin HIGH for scanTime ms
+          digitalWrite(trigPin, LOW); //set trig pin LOW again to end the pulse
+          pulseDuration = pulseIn(echoPin, HIGH); //measure the time in microseconds for the echo 
+//to return
+          targetDistance = pulseDuration * 0.034 / 2; //convert the time in microseconds for the 
+    //echo to return
+          if (targetDistance > 200) { //check if the distance is more than 200
+            stepperAngle = stepperAngle - angledStep; //set stepperAngle to be moved back by 1 
+    //degree
+            stepperMotor.step (-stepperAngle); //assign the value for the stepper motor to move to
+            digitalWrite(trigPin, LOW); //ensure the trigger pin is initially LOW to start clean
+            delay (settleTime); //wait settleTime ms for ultrasonic sensor to settle
+            digitalWrite(trigPin, HIGH); //send a HIGH pulse to trigger the ultrasonic burst
+            delay (scanTime); //keep the trig pin HIGH for scanTime ms
+            digitalWrite(trigPin, LOW); //set trig pin LOW again to end the pulse
+            pulseDuration = pulseIn(echoPin, HIGH); //measure the time in microseconds for the 
+  //echo to return
+            targetDistance = pulseDuration * 0.034 / 2; //convert the time in microseconds for the 
+ //echo to return
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print("Calculating target height"); //tell the user that the arduino is 
+//calculating the target height
+            targetHeight = (sqrt(sq(targetDistance) - sq(targetWidth))/2); //calculate the target 
+   //height
+            delay (longWait); //delay longWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print("target distance squared + target width squared square rooted"); 
+ //tell the user what it is doing to calculate the target height
+            delay (shortWait); //delay shortWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print(targetDistance + " squared + target width squared square rooted"); 
+ //input the targetDistance value into the calculations
+            delay (shortWait); //delay shortWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print(targetDistance); //print targetDistance value
+            lcdScreen.print (" squared + "); //print the operations of the calculations
+            lcdScreen.print (targetWidth + " squared square rooted"); //print the operations of 
+    //the calculations along 
+   //with targetWidth value
+            delay (shortWait); //delay shortWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print (sq(targetDistance)); //print the value of targetDistance squared
+            lcdScreen.print (" + " + sq(targetWidth)); //print the operations of the calculations 
+//along with the value of targetWidth 
+//squared
+            lcdScreen.print ("square rooted"); //print the operations of the calculations
+            delay (shortWait); //wait shortWait ms
+            lcdScreen.print ("divided by 2 to hit middle"); //tell the user that it is divided by 
+     //2 to hit the middle of target
+            lcdScreen.setCursor (0, 1); //tell the LCD where to start the display
+            lcdScreen.print (" = "); //tell the user that this is the calculated answer
+            lcdScreen.print (targetHeight); //print the value of targetHeight
+            delay (longWait); //wait longWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print ("          "); //clear screen of LCD screen
+            lcdScreen.setCursor (0, 0); //tell the LCD where to start the display
+            lcdScreen.print ("Calculating ball initial velocity"); //tell the user that it is 
+ //calculating the initial 
+//velocity of the ball
+            initialVelocity = horizontalDistance / horizontalInterval; //calculate the initial 
+     //velocity of the ball
+            delay (longWait); //delay longWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print ("ball distance / time interval"); //tell the user what it is doing to 
+  //calculate the initial velocity of   
+ //the ball
+            delay (shortWait); //delay shortWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print (horizontalDistance); //print the value of horizontalDistance
+            lcdScreen.print (" / time interval"); //print the operations of calculations
+            delay (shortWait); //wait shortWait
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print (horizontalDistance); //print the value of horizontalDistance
+            lcdScreen.print (" / "); //print the operations of calculations
+            lcdScreen.print (horizontalInterval); //print the value of horizontalInterval
+            lcdScreen.setCursor (0, 1); //tell the LCD where to start the display
+            lcdScreen.print (" = "); //tell the user that this is the calculated answer
+            lcdScreen.print (initialVelocity); //print the value of initialVelocity
+            delay (longWait); //wait longWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print ("          "); //clear the screen
+            lcdScreen.setCursor (0, 0); //tell the LCD where to start the display
+            lcdScreen.print ("Calculating optimal angle for target"); //tell the user that it is 
+    //calculating the optimal 
+   //angle to hit the target
+            calculationOne = gravityValue * (gravityValue * sq(targetWidth) + 2 * 
+ sq(initialVelocity) * targetHeight); //calculate step one of trajectory equation
+            delay (longWait); //wait longWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print ("value of gravity * target distance squared + 2 * initial velocity 
+ squared * target height"); //tell the user what it is doing to calculate the result
+            lcdScreen.setCursor (0, 1); //tell the LCD where to start the display
+            lcdScreen.print ("Step 1"); //tell the user that this is step one
+            lcdScreen.setCursor (0, 0); //tell the LCD where to start the display
+            delay (shortWait); //wait shortWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print (gravityValue); //print the value of gravityValue
+            lcdScreen.print (" * target distance squared + 2 * initial velocity squared * target 
+ height"); //print the rest of the calculation
+            delay (shortWait); //wait shortWait ms
+            lcdScreen.print (gravityValue); //print the value of gravityValue
+            lcdScreen.print (" * "); //print the operations of calculations
+            lcdScreen.print (targetWidth + " squared + 2 * initial velocity squared * target 
+ height"); //print the rest of the calculation
+            delay (shortWait); //delay shortWait
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print (gravityValue); //print the value of gravityValue 
+            lcdScreen.print (" * "); //print the operations of calculations
+            lcdScreen.print (targetWidth + " squared + 2 * "); //print the rest of the calculation
+            lcdScreen.print (initialVelocity); //print the value of initialVelocity
+            lcdScreen.print (" squared * target height"); //print the rest of the calculation
+            delay (shortWait); //delay shortWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print (gravityValue); //print the value of gravityValue
+            lcdScreen.print (" * "); //print the operations of calculations
+            lcdScreen.print (targetWidth + " squared + 2 * "); //print the operations of 
+  //calculations along with the value 
+ //of targetWidth
+            lcdScreen.print (initialVelocity); //print the value of initialVelocity
+            lcdScreen.print (" squared * "); //print the operations of calculations
+            lcdScreen.print (targetHeight); //print the value of targetHeight
+            delay (shortWait); //wait shortWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print (gravityValue); //print the value of gravityValue
+            lcdScreen.print (" * "); //print the operations of calculations
+            lcdScreen.print (sq(targetWidth) + " + 2 * "); //print the value of targetWidth 
+    //squared along with the operations of 
+   //calculations
+            lcdScreen.print (sq(initialVelocity)); //print the value of inititalVelocity squared
+            lcdScreen.print (" * "); //print the operations of calculations
+            lcdScreen.print (targetHeight); //print the value of targetHeight
+            lcdScreen.setCursor (0, 1); //tell the LCD where to start the display
+            lcdScreen.print (" = "); //tell the user that this is the result of the calculation
+            lcdScreen.print (calculationOne); //print the value of calculationOne
+            delay (longWait); //wait longWait ms
+            lcdScreen.setCursor (0,1); //tell the LCD where to start the display
+            lcdScreen.print ("Step 2"); //tell the user that this is step 2
+            calculationTwo = sq(sq(initialVelocity)) - calculationOne; //calculate step two of 
+     //trajectory equation
+            lcdScreen.setCursor (0, 0); //tell the LCD where to start the display
+            lcdScreen.print ("initial velocity to the fourth power - the answer to step 1"); 
+ //tell the user what it is doing to calculate step two of trajectory equation
+            delay (shortWait); //wait shortWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print (initialVelocity); //print the value of initialVelocity
+            lcdScreen.print (" to the fourth power - the answer to step 1"); //print the rest of 
+//the calculation
+            delay (shortWait); //wait shortWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print (initialVelocity); //print the value of initialVelocity
+            lcdScreen.print (" to the fourth power - "); //print the operations of calculations
+            lcdScreen.print (calculationOne); //print the value of calculationOne
+            delay (shortWait); //wait shortWait ms
+            lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+            lcdScreen.print (sq(sq(initialVelocity))); //print the value of initialVelocity to the 
+//fourth power
+            lcdScreen.print (" - "); //print the operations of calculations
+            lcdScreen.print (calculationOne); //print the value of calculationOne
+            lcdScreen.setCursor (0, 1); //tell the LCD where to start the display
+            lcdScreen.print (" = "); //tell the user that this is the result of the calculation 
+            lcdScreen.print (calculationTwo); //print the value of calculationTwo
+            if (calculationTwo < 0) { //check if calculationTwo is less than 0 
+              lcdScreen.setCursor (0, 0); //tell the LCD where to start the display
+              lcdScreen.print ("Calculation Two Error"); //tell the user that there is an error 
+  //with calculation two
+              stepperMotor.step(stepperAngle); //make the stepperMotor return to its original 
+   //position
+              stepperAngle = 1028.08; //make the stepperAngle value be able to reset
+            }
+            else { //check if calculationTwo is more than 0
+              delay (longWait); //wait longWait ms
+              lcdScreen.setCursor (0,1); //tell the LCD where to start the display
+              lcdScreen.print ("Step 3"); //tell the user that this is step three of the 
+   //trajectory equation
+              calculationThree = sq(initialVelocity); //calculate step three of the trajectory 
+    //equation
+              lcdScreen.setCursor (0, 0); //tell the LCD where to start the display
+              lcdScreen.print ("initial velocity squared"); //tell the user what is done to 
+     //calculate the result
+              delay (shortWait); //wait shortWait ms
+              lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+              lcdScreen.print (initialVelocity); //print the value of initialVelocity
+              lcdScreen.print (" squared"); //print the operations of calculations
+              lcdScreen.setCursor (0, 1); //tell the LCD where to start the display
+              lcdScreen.print (calculationThree); //print the value of calculationThree
+              delay (longWait); //wait longWait ms
+              lcdScreen.setCursor (0,1); //tell the LCD where to start the display
+              lcdScreen.print ("Step 4"); //tell the user that this is step 4 of the trajectory 
+   //equation
+              calculationFour = (calculationThree + calculationTwo) / (gravityValue * 
+   targetWidth); //calculate step four of the trajectory equation
+              lcdScreen.setCursor (0, 0); //tell the LCD where to start the display
+              lcdScreen.print ("(answer for step 3 + or - answer for step 2) / (value of gravity * 
+   target distance)"); //tell the user what is done to calculate the result
+              delay (shortWait); //wait shortWait ms
+              lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+              lcdScreen.print ("("); //print the operations of calculation
+              lcdScreen.print (calculationThree); //print the value of calculationThree
+              lcdScreen.print (" + or - answer for step 2) / (value of gravity * target 
+   distance)"); //print the rest of the calculation
+              delay (shortWait); //wait shortWait ms
+              lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+              lcdScreen.print ("("); //print the operation of calculation
+              lcdScreen.print (calculationThree); //print the value of calculationThree
+              lcdScreen.print (" + or - "); //print the operation of calculation
+              lcdScreen.print (calculationTwo); //print the value of calculationTwo 
+              lcdScreen.print (") / (value of gravity * target distance)"); //print the rest of 
+ 											    //the calculation
+              delay (shortWait); //wait shortWait ms
+              lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+              lcdScreen.print ("("); //print the operation of calculation 
+              lcdScreen.print (calculationThree); //print the value of calculationThree
+              lcdScreen.print (" + or - "); //print the operation of calculation
+              lcdScreen.print (calculationTwo); //print the value of calculationTwo
+              lcdScreen.print (") / ("); //print the operation of calculation
+              lcdScreen.print (gravityValue); //print the value of gravityValue
+              lcdScreen.print (" * target distance)"); //print the rest of the calculation
+              delay (shortWait); //wait shortWait ms 
+              lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+              lcdScreen.print ("("); //print the operation of calculation 
+              lcdScreen.print (calculationThree); //print the value of calculationThree
+              lcdScreen.print (" + or - "); //print the operation of calculation 
+              lcdScreen.print (calculationTwo); //print the value of calculationTwo
+              lcdScreen.print (") / ("); //print the operation of calculation
+              lcdScreen.print (gravityValue); //print the value of gravityValue
+              lcdScreen.print (" + "); //print the operation of calculation
+              lcdScreen.print (targetWidth); //print the value of targetWidth
+              lcdScreen.setCursor (0, 2); //tell the LCD where to start the display
+              if (calculationThree <= calculationTwo) { //check if the values of calculationThree 
+ //is less than or equal to calculationTwo
+                lcdScreen.print ("solution 1 = "); //tell the user that solution one equals to
+                lcdScreen.print (calculationFour); //print the value of calculationFour
+                lcdScreen.print ("solution 2 = N / A"); //tell the user that there is no answer to 
+ //calculation two
+                delay (longWait); //wait longWait ms
+                lcdScreen.setCursor (0,1); //tell the LCD where to start the display
+                lcdScreen.print ("                               "); //clear the display
+                lcdScreen.setCursor (0, 1); //tell the LCD where to start the display
+                lcdScreen.print ("Step 5"); //tell the user that this is step five to trajectory 
+//equation
+                lcdScreen.setCursor (0, 0); //tell the LCD where to start the display
+                angleOne = (atan (calculationFour))*57.2957795131; //calculate step five to 
+ //trajectory equation
+                lcdScreen.print ("arctan solution to Step 4"); //tell the user what is done to 
+  //calculate the solution
+                delay (shortWait); //wait shortWait ms
+                lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+                lcdScreen.print ("arctan"); //print the operations of calculations
+                lcdScreen.print (calculationFour); //print the value of calculationFour
+                lcdScreen.setCursor (0, 2); //tell the LCD where to start the display
+                lcdScreen.print ("angle 1 = "); //tell the user that the first angle equals to
+                lcdScreen.print (angleOne); //print the value of angleOne
+                lcdScreen.print ("angle 2 = N / A"); //tell the user that there is no answer to 
+   //angle 2
+                delay (longWait); //wait longWait ms
+                calculatedAngle = angleOne * angledStep - stepperAngle; //find the angle needed 
+//for the stepper motor to 
+    //reach that angle
+                stepperMotor.step(-calculatedAngle); //assign the value to the stepper motor to 
+   //move to the angle
+                contServo.write(cwValue); //set the continuous servo motor to move clockwise
+                delay (upTime); //wait upTime ms
+                contServo.write(stopValue); //stop the continuous servo motor
+                delay (upTime); //wait upTime ms
+                contServo.write(ccwValue); //set the continuous servo motor to move 
+    //counterclockwise
+                delay (downTime); //wait downTime ms
+                contServo.write(stopValue); //stop the continuous servo motor
+                returnAngle = calculatedAngle + stepperAngle; //calculate the angle for the 
+ //stepper motor to return to its 
+//original position
+                stepperMotor.step(returnAngle); //assign the value to the stepper motor to move to 
+    //the angle
+                stepperAngle = 1028.08; //allow the value of stepperAngle to reset
+              }
+              else { //check if the value of calculationThree is more than calculationTwo
+                calculationFive = (calculationThree - calculationTwo) / (gravityValue * 
+     targetWidth); //calculate the second answer to step four
+                lcdScreen.setCursor (0, 2); //tell the LCD where to start the display
+                lcdScreen.print ("solution 1 = "); //tell the user that this is the solution to 
+ //solution one
+                lcdScreen.print (calculationFour); //print the value of calculationFour
+                lcdScreen.print ("solution 2 = "); //tell the user that this is the solution to 
+ //solution two
+                lcdScreen.print (calculationFive); //print the value of calculationFive
+                delay (longWait); //wait longWait ms
+                lcdScreen.setCursor (0,2); //tell the LCD where to start the display
+                lcdScreen.print ("                                "); //clear the LCD screen
+                lcdScreen.setCursor (0, 1); //tell the LCD where to start the display
+                lcdScreen.print ("Step 5"); //tell the user that this is step five of trajectory 
+//equation
+                lcdScreen.setCursor (0, 0); //tell the LCD where to start the display
+                angleOne = (atan (calculationFour))*57.2957795131; //calculate the first angle of 
+ //trajectory equation
+                angleTwo = (atan (calculationFive))*57.2957795131; //calculate the second angle of 
+ //trajectory equation
+                lcdScreen.print ("arctan solutions to Step 4"); //tell the user what is done to 
+   //find the solutions to step five 
+  //of trajectory equation
+                delay (shortWait); //wait shortWait ms
+                lcdScreen.setCursor (0,0); //tell the LCD where to start the display
+                lcdScreen.print ("arctan"); //print the operations of calculations
+                lcdScreen.print (calculationFour); //print the value of calculationFour
+                lcdScreen.print (" and "); //tell the user that there are two solutions
+                lcdScreen.print (calculationFive); //print the value of calculationFive
+                lcdScreen.setCursor (0, 2); //tell the LCD where to start the display
+                lcdScreen.print ("angle 1 = "); //tell the user that this is answer one to step 
+    //five
+                lcdScreen.print (angleOne); //print the value of angleOne
+                lcdScreen.print ("angle 2 = "); //tell the user that this is answer two to step 
+    //five
+                lcdScreen.print (angleTwo); //print the value of angleTwo
+                delay (longWait); //wait longWait ms
+                lcdScreen.setCursor (0, 0); //tell the LCD where to start the display
+                lcdScreen.print ("Please select your angle"); //tell the user to choose the angle 
+ //to shoot the cannon
+                lcdScreen.setCursor (0, 1); //tell the LCD where to start the display
+                lcdScreen.print ("One for angle 1, Two for angle 2"); //tell the user what options 
+    //to choose
+                monitorStatus = Serial.available(); //assign monitorStatus to see if something is 
+  //imputed
+                if (monitorStatus > 0) { //check if something is imputed
+                  incomingText = Serial.readString(); //assign incomingText to what is input into 
+    //the serial monitor
+                  if (incomingText == "One") { //check if “One” is imputed into the serial monitor
+                    calculatedAngle = angleOne * angledStep - stepperAngle; //calculate the angle 
+    //the stepper motor 
+   //needs to move in order 
+  //to reach the angle   
+ //chosen
+                    stepperMotor.step(calculatedAngle); //assign the value to the stepper motor to 
+ //move to the angle
+                  }
+                  else if (incomingText == "Two") { //check if “Two” is imputed into the serial 
+  //monitor
+                    calculatedAngle = angleTwo * angledStep - stepperAngle; //calculate the angle 
+    //the stepper motor 
+   //needs to move in order 
+  //to reach the angle    
+ //chosen
+                    stepperMotor.step(calculatedAngle); //assign the value to the stepper motor to 
+ //move to the angle
+                  }
+                  contServo.write(cwValue); //set the continuous servo motor to move clockwise
+                  delay (upTime); //wait upTime ms
+                  contServo.write(stopValue); //stop the continuous servo motor
+                  delay (upTime); //wait upTime ms
+                  contServo.write(ccwValue); //set the continuous servo motor to move 
+ //counterclockwise
+                  delay (downTime); //wait downTime ms 
+                  contServo.write(stopValue); //stop the continuous servo motor
+                  returnAngle = calculatedAngle + stepperAngle; //calculate the angle needed for 
+   //the stepper motor to return to 
+  //its original position
+                  stepperMotor.step(returnAngle); //assign the value to the stepper motor to move 
+//to the angle
+                  stepperAngle = 1028.08; //allow the value of stepperAngle to be reset
+                  lcdScreen.setCursor (0,1); //tell the LCD where to start the display
+                  lcdScreen.print ("                              "); //clear the LCD screen
+                  lcdScreen.setCursor (0, 2); //tell the LCD where to start the display
+                  lcdScreen.print ("                              "); //clear the LCD screen
+                  lcdScreen.setCursor (0, 0); //tell the LCD where to start the display
+                  lcdScreen.print ("                              "); //clear the LCD screen
+                }
+              }
+            }
+          }
+        }
+      }
+      if (motorAngle == 181) { //check if the value of motorAngle is 181, to reset the value of 
+   //motorAngle
+        motorAngle = 0; //make the value of motorAngle 0
+      }
+        if (stepperAngle == 1028.08) { //check if the value of stepperAngle is 1028.08, to reset 
+//the value of stepperAngle
+          stepperAn
+gle = 0; //make the value of stepperAngle 0
+        }
+      }
+    }
+   }
+  }
