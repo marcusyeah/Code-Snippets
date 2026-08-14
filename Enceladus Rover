@@ -1,0 +1,292 @@
+#include <Servo.h>
+
+
+const int trigPin = A3;
+const int echoPin = A4;
+const int servoPin = A5;
+const int buzzerPin = 13;
+const int redLed = 7;
+const int greLed = 6;
+const int yelLed = 5;
+const int bluLed1 = A2;
+const int bluLed2 = 4;
+const int bluLed3 = 3;
+
+
+Servo myservo;
+
+
+int pos = 0;
+// 1 = increasing, -1 = decreasing
+int dir = 1;
+unsigned long lastStepTime = 0;
+// ms per degree
+const int stepDelay = 15;
+const unsigned long pauseAtEnd = 500;
+unsigned long pauseStart = 0;
+bool pausing = false;
+
+
+long duration;
+// calibrated "normal" distance per angle
+int baseline[181];
+// cm closer than baseline = obstacle
+const int margin = 8;
+// ignore noise below this
+const int minValidDistance = 2;
+// sensor's practical max range
+const int maxValidDistance = 400;
+// ~4m round trip, prevents pulseIn hanging
+const unsigned long echoTimeout = 25000UL;
+
+
+enum State { SCANNING, ALERT };
+State currentState = SCANNING;
+
+
+enum ChatterPhase { WAITING, BEEP_ON, BEEP_GAP };
+ChatterPhase chatterPhase = WAITING;
+unsigned long phaseStart = 0;
+long phaseDuration = 0;
+int beepsRemaining = 0;
+
+
+void setup() {
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(buzzerPin, OUTPUT);
+  pinMode(redLed, OUTPUT);
+  pinMode(greLed, OUTPUT);
+  pinMode(yelLed, OUTPUT);
+  pinMode(bluLed1, OUTPUT);
+  pinMode(bluLed2, OUTPUT);
+  pinMode(bluLed3, OUTPUT);
+
+
+  Serial.begin(9600);
+  // floating pin for entropy
+  randomSeed(analogRead(A0));
+
+
+  myservo.attach(servoPin, 600, 2300);
+
+
+  calibrateBaseline();
+  scheduleNextChatter();
+}
+
+
+void loop() {
+  digitalWrite(bluLed1, HIGH);
+  digitalWrite(bluLed2, HIGH);
+  digitalWrite(bluLed3, HIGH);
+
+
+  // moves servo + takes a reading each new angle
+  updateServoSweep();
+  // drives LEDs/buzzer based on currentState
+  updateStateOutputs();
+}
+
+
+void updateServoSweep() {
+  unsigned long now = millis();
+
+
+  if (currentState == ALERT) {
+    // hold position and keep watching the same spot while alerted
+    checkForObstacleAtCurrentAngle();
+    return;
+  }
+
+
+  if (pausing) {
+    if (now - pauseStart >= pauseAtEnd) {
+      pausing = false;
+    }
+    return;
+  }
+
+
+  if (now - lastStepTime >= (unsigned long)stepDelay) {
+    lastStepTime = now;
+    myservo.write(pos);
+
+
+    checkForObstacle(pos);
+
+
+    pos += dir;
+    if (pos >= 180) {
+      pos = 180;
+      dir = -1;
+      pausing = true;
+      pauseStart = now;
+    } else if (pos <= 0) {
+      pos = 0;
+      dir = 1;
+      pausing = true;
+      pauseStart = now;
+    }
+  }
+}
+
+
+int readDistanceCM() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+
+  duration = pulseIn(echoPin, HIGH, echoTimeout);
+  // no echo = treat as clear/out of range
+  if (duration == 0) return maxValidDistance + 1;
+  return (int)(duration * 0.034 / 2);
+}
+
+
+void checkForObstacle(int angle) {
+  int d = readDistanceCM();
+
+
+  Serial.print("Angle: ");
+  Serial.print(angle);
+  Serial.print("  Distance: ");
+  Serial.print(d);
+  Serial.print("  Baseline: ");
+  Serial.println(baseline[angle]);
+
+
+  // ignore noise spikes, keep current state
+  if (d < minValidDistance) return;
+
+
+  if (d < (baseline[angle] - margin)) {
+    currentState = ALERT;
+  } else {
+    currentState = SCANNING;
+  }
+}
+
+
+void checkForObstacleAtCurrentAngle() {
+  // same check but re-uses current pos, so we can clear alert
+  // once the obstacle at this angle is gone
+  checkForObstacle(pos);
+}
+
+
+void calibrateBaseline() {
+  // sweep once at startup with a clear area in front of the rover
+  // to record the normal floor/background distance at every angle
+  for (int a = 0; a <= 180; a++) {
+    myservo.write(a);
+    // let servo settle before reading
+    delay(20);
+
+
+    long sum = 0;
+    const int samples = 3;
+    for (int s = 0; s < samples; s++) {
+      int d = readDistanceCM();
+      if (d > maxValidDistance) d = maxValidDistance;
+      sum += d;
+      delay(10);
+    }
+    baseline[a] = sum / samples;
+  }
+
+
+  myservo.write(0);
+  pos = 0;
+  dir = 1;
+  delay(300);
+}
+
+
+void updateStateOutputs() {
+  if (currentState == ALERT) {
+    digitalWrite(redLed, HIGH);
+    digitalWrite(greLed, LOW);
+    digitalWrite(yelLed, LOW);
+    // continuous blare
+    digitalWrite(buzzerPin, HIGH);
+  } else {
+    digitalWrite(redLed, LOW);
+    digitalWrite(greLed, HIGH);
+    // owns buzzer + yelLed while scanning normally
+    updateChatter();
+  }
+}
+
+
+void scheduleNextChatter() {
+  chatterPhase = WAITING;
+  phaseStart = millis();
+  // pause between chatter bursts
+  phaseDuration = random(5000, 15000);
+}
+
+
+void startBeep() {
+  chatterPhase = BEEP_ON;
+  phaseStart = millis();
+  // fast micro-beep
+  phaseDuration = random(20, 80);
+  digitalWrite(buzzerPin, HIGH);
+  digitalWrite(yelLed, HIGH);
+}
+
+
+void startGap() {
+  chatterPhase = BEEP_GAP;
+  phaseStart = millis();
+  // short gap inside a burst
+  phaseDuration = random(30, 100);
+  digitalWrite(buzzerPin, LOW);
+  digitalWrite(yelLed, LOW);
+}
+
+
+void updateChatter() {
+  unsigned long now = millis();
+  unsigned long elapsed = now - phaseStart;
+
+
+  switch (chatterPhase) {
+    case WAITING:
+      digitalWrite(buzzerPin, LOW);
+      digitalWrite(yelLed, LOW);
+      if (elapsed >= (unsigned long)phaseDuration) {
+        // 1-4 beeps per burst
+        beepsRemaining = random(1, 5);
+        startBeep();
+      }
+      break;
+
+
+    case BEEP_ON:
+      if (elapsed >= (unsigned long)phaseDuration) {
+        beepsRemaining--;
+        if (beepsRemaining <= 0) {
+          scheduleNextChatter();
+        } else {
+          startGap();
+        }
+      }
+      break;
+
+
+    case BEEP_GAP:
+      if (elapsed >= (unsigned long)phaseDuration) {
+        startBeep();
+      }
+      break;
+  }
+}
+
+
+
+
