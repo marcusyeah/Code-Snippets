@@ -1,1 +1,1 @@
-this is a collection of code snippets for each of my projects
+Hello! Welcome to my collection of mechatronics projects, showcasing my problem-solving and engineering skills.
